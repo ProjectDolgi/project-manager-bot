@@ -2,9 +2,10 @@ import { Telegraf } from 'telegraf';
 import { BotContext } from '../index';
 import { Services } from './index';
 import { logger } from '../utils/logger';
+import { getUserState } from '../middleware';
 
 export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
-  const { aiService, projectService } = services;
+  const { aiService, projectService, voiceService } = services;
 
   // Команда /ai - вопрос к ИИ
   bot.command('ai', async (ctx: any) => {
@@ -12,36 +13,39 @@ export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
       const args = ctx.message.text.split(' ').slice(1);
       
       if (args.length === 0) {
-        await ctx.reply('Задайте вопрос: /ai <ваш вопрос>');
+        await ctx.reply(`
+🤖 *Задайте вопрос ИИ помощнику*
+
+Примеры вопросов:
+• \`/ai что это за бот\`
+• \`/ai как организовать daily standup\`
+• \`/ai какие есть роли в команде\`
+• \`/ai как добавить нового участника\`
+• \`/ai дай совет по управлению проектом\`
+
+💡 *Я знаю всё о нашем боте и команде!*
+        `, { parse_mode: 'Markdown' });
         return;
       }
 
       const question = args.join(' ');
-      await ctx.reply('🤖 Обрабатываю ваш запрос...');
+      await ctx.reply('🤖 Анализирую ваш вопрос с учетом контекста команды...');
 
-      const response = await aiService.processVoiceCommand(question);
+      // Используем новый метод с полным контекстом
+      const response = await aiService.processQuestionWithContext(question, projectService);
       
-      try {
-        const parsed = JSON.parse(response);
-        if (parsed.command === 'error') {
-          await ctx.reply(`❌ ${parsed.params.message}`);
-        } else {
-          await ctx.reply(`🤖 Понял! Команда: ${parsed.command}\nПараметры: ${JSON.stringify(parsed.params, null, 2)}`);
-        }
-      } catch {
-        await ctx.reply(`🤖 ${response}`);
-      }
+      await ctx.replyWithMarkdown(`🤖 ${response}`);
 
     } catch (error) {
       logger.error('Ошибка в команде /ai:', error);
-      await ctx.reply('Ошибка при обработке запроса к ИИ.');
+      await ctx.reply('❌ Произошла ошибка при обработке запроса к ИИ.');
     }
   });
 
   // Команда /analyze - анализ команды
   bot.command('analyze', async (ctx: any) => {
     try {
-      await ctx.reply('📊 Анализирую состояние команды...');
+      await ctx.reply('📊 Анализирую состояние команды с полным контекстом...');
 
       const statuses = await projectService.getTodayStatuses();
       
@@ -50,7 +54,7 @@ export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
         return;
       }
 
-      const analysis = await aiService.analyzeTeamStatus(statuses);
+      const analysis = await aiService.analyzeTeamStatus(statuses, projectService);
       
       let message = '🔍 *Анализ команды*\n\n';
       message += `📝 *Резюме:* ${analysis.summary}\n\n`;
@@ -79,42 +83,59 @@ export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
 
     } catch (error) {
       logger.error('Ошибка в команде /analyze:', error);
-      await ctx.reply('Ошибка при анализе команды.');
+      await ctx.reply('❌ Ошибка при анализе команды.');
     }
   });
 
   // Команда /summary - генерация отчета
   bot.command('summary', async (ctx: any) => {
     try {
-      await ctx.reply('📋 Генерирую отчет...');
+      await ctx.reply('📋 Генерирую отчет с полным контекстом команды...');
 
       const summary = await projectService.getTeamSummary();
-      const report = await aiService.generateSummary(summary);
+      const report = await aiService.generateSummary(summary, projectService);
 
       await ctx.replyWithMarkdown(report);
 
     } catch (error) {
       logger.error('Ошибка в команде /summary:', error);
-      await ctx.reply('Ошибка при генерации отчета.');
+      await ctx.reply('❌ Ошибка при генерации отчета.');
     }
   });
 
-  // Обработка голосовых сообщений
-  bot.on('voice', async (ctx: any) => {
+  // Обработка голосовых сообщений для AI
+  bot.on('voice', async (ctx, next) => {
     try {
-      await ctx.reply('🎤 Получил голосовое сообщение! Обрабатываю...');
-      
-      // В реальной реализации здесь будет:
-      // 1. Скачивание голосового файла
-      // 2. Конвертация в текст через Speech-to-Text API
-      // 3. Обработка через ИИ
-      
-      // Пока заглушка
-      await ctx.reply('🤖 Функция обработки голосовых сообщений будет добавлена в следующей версии!');
+      const userId = ctx.from?.id.toString();
+      if (!userId) return next();
 
+      const userState = getUserState(userId);
+      
+      // Если пользователь НЕ в процессе standup, обрабатываем как AI запрос
+      if (!userState?.waitingForStandup) {
+        await ctx.reply('🎤 Получил голосовое сообщение! Расшифровываю и обрабатываю через ИИ...');
+        
+        const { text } = await voiceService.processVoiceMessage(ctx);
+        
+        // Обрабатываем расшифрованный текст через AI с контекстом
+        const response = await aiService.processQuestionWithContext(text, projectService);
+        
+        await ctx.replyWithMarkdown(`
+🎤➡️📝 *Расшифровка:* "${text}"
+
+🤖 *Ответ ИИ:*
+${response}
+        `);
+        
+        return; // Не передаем дальше
+      }
+      
+      return next(); // Передаем standup обработчику
+      
     } catch (error) {
-      logger.error('Ошибка при обработке голосового сообщения:', error);
-      await ctx.reply('Ошибка при обработке голосового сообщения.');
+      logger.error('Ошибка при обработке голосового AI запроса:', error);
+      await ctx.reply('❌ Произошла ошибка при обработке голосового сообщения. Попробуйте еще раз или используйте текстовый ввод.');
+      return next();
     }
   });
 } 

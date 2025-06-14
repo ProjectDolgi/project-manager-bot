@@ -18,8 +18,151 @@ export class AIService {
     });
   }
 
-  async analyzeTeamStatus(dailyStatuses: any[]): Promise<AIAnalysis> {
+  // Создание системного контекста бота
+  private async createBotContext(projectService?: any): Promise<string> {
+    let context = `
+🤖 **Ты - Project Manager AI Bot**
+
+**Твоя роль:** Ты умный помощник проджект менеджера в Telegram боте для управления командой разработчиков.
+
+**Основные функции бота:**
+• 📊 Daily Standup автоматизация
+• 🎯 Управление задачами и проектами  
+• 🤖 ИИ анализ и рекомендации
+• 📈 Отчеты и аналитика
+• 🗣 Голосовые команды
+• 👑 Управление ролями команды
+
+**Доступные роли в команде:**
+• admin 👑 - администратор (полные права)
+• project_manager 📊 - проджект менеджер (управление командой)
+• frontend_developer 🎨 - фронтенд-разработчик
+• backend_developer ⚙️ - бэкэнд-разработчик
+• designer 🎭 - дизайнер
+• marketer 📈 - маркетолог
+• producer 🎬 - продюсер
+• psychologist 🧠 - психолог
+
+**Основные команды:**
+• /start - начать работу с ботом
+• /help - справка по всем командам
+• /profile - настройка профиля
+• /team - состав команды
+• /standup - запуск daily standup
+• /mystatus - мой статус на сегодня
+• /teamstatus - статус всей команды
+• /projects - управление проектами
+• /ai <вопрос> - задать вопрос ИИ
+• /analyze - анализ состояния команды
+• /summary - генерация отчета
+
+**Админские команды:**
+• /setrole @username роль - изменить роль пользователя
+• /promote @username - повысить до администратора
+• /roles - просмотр ролей команды
+
+**Методология:** Agile/Scrum с daily standups, спринтами и ретроспективами.
+`;
+
+    // Добавляем информацию о текущей команде если доступна
+    if (projectService) {
+      try {
+        const users = await projectService.getAllUsers();
+        const projects = await projectService.getActiveProjects();
+        const todayStatuses = await projectService.getTodayStatuses();
+
+        context += `\n**Текущее состояние команды:**\n`;
+        context += `👥 Участников: ${users.length}\n`;
+        context += `🚀 Активных проектов: ${projects.length}\n`;
+        context += `✅ Отчитались сегодня: ${todayStatuses.length}\n\n`;
+
+        if (users.length > 0) {
+          context += `**Участники команды:**\n`;
+          users.forEach((user: any) => {
+            const usernameDisplay = user.username ? `@${user.username}` : 'без username';
+            const roleEmoji = this.getRoleEmoji(user.role);
+            context += `• ${user.name} (${usernameDisplay}) - ${roleEmoji} ${user.role}\n`;
+          });
+          context += '\n';
+        }
+
+        if (projects.length > 0) {
+          context += `**Активные проекты:**\n`;
+          projects.forEach((project: any) => {
+            context += `• ${project.name} - ${project.description}\n`;
+          });
+          context += '\n';
+        }
+
+        if (todayStatuses.length > 0) {
+          context += `**Сегодняшние статусы:**\n`;
+          todayStatuses.forEach((status: any) => {
+            context += `• ${status.name}: "${status.today}"\n`;
+          });
+        }
+      } catch (error) {
+        logger.warn('Не удалось загрузить контекст команды:', error);
+      }
+    }
+
+    context += `\n**Инструкции:**
+• Отвечай на русском языке
+• Будь полезным и конструктивным
+• Используй эмодзи для лучшего восприятия
+• Давай конкретные рекомендации по управлению проектами
+• Помогай с планированием и организацией работы
+• Анализируй проблемы команды и предлагай решения`;
+
+    return context;
+  }
+
+  private getRoleEmoji(role: string): string {
+    const roleEmojis: { [key: string]: string } = {
+      'admin': '👑',
+      'project_manager': '📊',
+      'frontend_developer': '🎨',
+      'backend_developer': '⚙️',
+      'designer': '🎭',
+      'marketer': '📈',
+      'producer': '🎬',
+      'psychologist': '🧠'
+    };
+    
+    return roleEmojis[role] || '👤';
+  }
+
+  // Новый метод для обработки вопросов с контекстом
+  async processQuestionWithContext(question: string, projectService?: any): Promise<string> {
     try {
+      const systemContext = await this.createBotContext(projectService);
+      
+      const completion = await this.openai.chat.completions.create({
+        model: config.OPENAI_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemContext
+          },
+          {
+            role: 'user',
+            content: question
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 1500
+      });
+
+      return completion.choices[0]?.message?.content || 'Не удалось получить ответ от ИИ';
+      
+    } catch (error) {
+      logger.error('Ошибка при обработке вопроса с контекстом:', error);
+      return 'Произошла ошибка при обработке вашего вопроса. Попробуйте позже.';
+    }
+  }
+
+  async analyzeTeamStatus(dailyStatuses: any[], projectService?: any): Promise<AIAnalysis> {
+    try {
+      const systemContext = await this.createBotContext(projectService);
       const prompt = this.buildAnalysisPrompt(dailyStatuses);
       
       const completion = await this.openai.chat.completions.create({
@@ -27,7 +170,7 @@ export class AIService {
         messages: [
           {
             role: 'system',
-            content: 'Ты опытный проджект менеджер, который анализирует статусы команды разработчиков и дает рекомендации по улучшению процессов.'
+            content: systemContext + '\n\nТвоя задача - проанализировать статусы команды и дать профессиональные рекомендации.'
           },
           {
             role: 'user',
@@ -89,8 +232,9 @@ export class AIService {
     }
   }
 
-  async generateSummary(data: any): Promise<string> {
+  async generateSummary(data: any, projectService?: any): Promise<string> {
     try {
+      const systemContext = await this.createBotContext(projectService);
       const prompt = `
         Создай краткий отчет по команде на основе следующих данных:
         ${JSON.stringify(data, null, 2)}
@@ -109,7 +253,7 @@ export class AIService {
         messages: [
           {
             role: 'system',
-            content: 'Ты создаешь краткие и информативные отчеты для проджект менеджеров.'
+            content: systemContext + '\n\nТвоя задача - создать информативный отчет для проджект менеджера.'
           },
           {
             role: 'user',

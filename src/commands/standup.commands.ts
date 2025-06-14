@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { setUserState, getUserState, clearUserState } from '../middleware';
 
 export function setupStandupCommands(bot: Telegraf<BotContext>, services: Services) {
-  const { projectService } = services;
+  const { projectService, voiceService } = services;
 
   // Команда /standup - запуск daily standup
   bot.command('standup', async (ctx) => {
@@ -118,7 +118,13 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
       });
     }
 
-    await ctx.reply('📝 *Что вы делали вчера?*\n\nОтправьте ваш ответ следующим сообщением.', { parse_mode: 'Markdown' });
+    await ctx.reply('📝 *Что вы делали вчера?*\n\nОтправьте ваш ответ следующим сообщением.', { 
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Опишите что вы делали вчера...'
+      }
+    });
   });
 
   bot.action('standup_voice', async (ctx) => {
@@ -155,18 +161,44 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
           userState.standupData.yesterday = text;
           userState.standupStep = 'today';
           setUserState(userId, userState);
-          await ctx.reply('🎯 *Что планируете делать сегодня?*', { parse_mode: 'Markdown' });
+          await ctx.reply('🎯 *Что планируете делать сегодня?*', { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              force_reply: true,
+              input_field_placeholder: 'Опишите планы на сегодня...'
+            }
+          });
           break;
           
         case 'today':
           userState.standupData.today = text;
           userState.standupStep = 'blockers';
           setUserState(userId, userState);
-          await ctx.reply('🚫 *Есть ли блокеры?* (напишите "нет" если блокеров нет)', { parse_mode: 'Markdown' });
+          await ctx.reply('🚫 *Есть ли блокеры?* (напишите "нет" если блокеров нет)', { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              force_reply: true,
+              input_field_placeholder: 'Опишите блокеры или напишите "нет"...'
+            }
+          });
           break;
           
         case 'blockers':
           userState.standupData.blockers = text === 'нет' ? '' : text;
+          userState.standupStep = 'mood';
+          setUserState(userId, userState);
+          await ctx.reply('😊 *Как ваше настроение?* (от 1 до 10)', { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              force_reply: true,
+              input_field_placeholder: 'Введите число от 1 до 10...'
+            }
+          });
+          break;
+
+        case 'mood':
+          const moodScore = parseInt(text) || 7;
+          const finalMood = Math.max(1, Math.min(10, moodScore)); // Ограничиваем от 1 до 10
           
           // Сохраняем в базу данных
           const user = await projectService.getUserByTelegramId(userId);
@@ -176,10 +208,11 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
               userState.standupData.yesterday,
               userState.standupData.today,
               userState.standupData.blockers,
-              7 // Настроение по умолчанию
+              finalMood
             );
             
-            await ctx.reply('✅ *Спасибо! Ваш daily standup сохранен.*\n\nИспользуйте /teamstatus чтобы посмотреть статус всей команды.', { parse_mode: 'Markdown' });
+            const moodEmoji = finalMood >= 8 ? '😊' : finalMood >= 6 ? '😐' : '😞';
+            await ctx.reply(`✅ *Спасибо! Ваш daily standup сохранен.*\n\n${moodEmoji} Настроение: ${finalMood}/10\n\nИспользуйте /teamstatus чтобы посмотреть статус всей команды.`, { parse_mode: 'Markdown' });
           }
           
           clearUserState(userId);
@@ -189,6 +222,62 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
       logger.error('Ошибка при обработке standup ответа:', error);
       clearUserState(userId);
       await ctx.reply('Произошла ошибка. Попробуйте снова с /standup');
+    }
+  });
+
+  // Обработка голосовых сообщений для standup
+  bot.on('voice', async (ctx, next) => {
+    try {
+      const userId = ctx.from?.id.toString();
+      if (!userId) return next();
+
+      const userState = getUserState(userId);
+      
+      // Если пользователь в процессе standup или это общий голосовой standup
+      if (userState?.waitingForStandup || !userState) {
+        await ctx.reply('🎤 Обрабатываю голосовое сообщение...');
+        
+        const standupData = await voiceService.processVoiceStandup(ctx);
+        
+        // Сохраняем в базу данных
+        const user = await projectService.getUserByTelegramId(userId);
+        if (user) {
+          await projectService.saveDailyStatus(
+            user.id,
+            standupData.yesterday,
+            standupData.today,
+            standupData.blockers,
+            standupData.mood
+          );
+          
+          const moodEmoji = standupData.mood >= 8 ? '😊' : standupData.mood >= 6 ? '😐' : '😞';
+          
+          await ctx.replyWithMarkdown(`
+✅ *Голосовой standup обработан!*
+
+📝 *Расшифровка:*
+• *Вчера:* ${standupData.yesterday}
+• *Сегодня:* ${standupData.today}
+• *Блокеры:* ${standupData.blockers || 'Нет'}
+• *Настроение:* ${moodEmoji} ${standupData.mood}/10
+
+Используйте /teamstatus чтобы посмотреть статус всей команды.
+          `);
+        }
+        
+        // Очищаем состояние если было
+        if (userState?.waitingForStandup) {
+          clearUserState(userId);
+        }
+        
+        return; // Не передаем дальше
+      }
+      
+      return next(); // Передаем другим обработчикам
+      
+    } catch (error) {
+      logger.error('Ошибка при обработке голосового standup:', error);
+      await ctx.reply('❌ Произошла ошибка при обработке голосового сообщения. Попробуйте еще раз или используйте текстовый ввод.');
     }
   });
 } 

@@ -3,6 +3,7 @@ import { config } from './config/config';
 import { DatabaseService } from './services/database.service';
 import { AIService } from './services/ai.service';
 import { ProjectService } from './services/project.service';
+import { VoiceService } from './services/voice.service';
 import { setupCommands } from './commands';
 import { setupMiddleware } from './middleware';
 import { setupCronJobs } from './cron';
@@ -38,12 +39,14 @@ class ProjectManagerBot {
   private dbService: DatabaseService;
   private aiService: AIService;
   private projectService: ProjectService;
+  private voiceService: VoiceService;
 
   constructor() {
     this.bot = new Telegraf<BotContext>(config.BOT_TOKEN);
     this.dbService = new DatabaseService();
     this.aiService = new AIService();
     this.projectService = new ProjectService(this.dbService);
+    this.voiceService = new VoiceService();
   }
 
   private async setupBotCommands() {
@@ -68,7 +71,8 @@ class ProjectManagerBot {
       setupCommands(this.bot, {
         dbService: this.dbService,
         aiService: this.aiService,
-        projectService: this.projectService
+        projectService: this.projectService,
+        voiceService: this.voiceService
       });
 
       // Настройка cron задач

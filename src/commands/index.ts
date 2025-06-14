@@ -3,6 +3,7 @@ import { BotContext } from '../index';
 import { DatabaseService } from '../services/database.service';
 import { AIService } from '../services/ai.service';
 import { ProjectService } from '../services/project.service';
+import { VoiceService } from '../services/voice.service';
 import { setupBasicCommands } from './basic.commands';
 import { setupProjectCommands } from './project.commands';
 import { setupStandupCommands } from './standup.commands';
@@ -13,6 +14,7 @@ export interface Services {
   dbService: DatabaseService;
   aiService: AIService;
   projectService: ProjectService;
+  voiceService: VoiceService;
 }
 
 export function setupCommands(bot: Telegraf<BotContext>, services: Services) {
