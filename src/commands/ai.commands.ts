@@ -2,7 +2,7 @@ import { Telegraf } from 'telegraf';
 import { BotContext } from '../index';
 import { Services } from './index';
 import { logger } from '../utils/logger';
-import { getUserState } from '../middleware';
+import { getUserState, clearUserState } from '../middleware';
 
 export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
   const { aiService, projectService, voiceService } = services;
@@ -103,6 +103,37 @@ export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
     }
   });
 
+  // Обработка текстовых сообщений для AI
+  bot.on('text', async (ctx, next) => {
+    const userId = ctx.from?.id.toString();
+    if (!userId) return next();
+
+    const userState = getUserState(userId);
+    
+    // Если пользователь в режиме ожидания AI вопроса
+    if (userState?.waitingForAI) {
+      try {
+        const question = ctx.message.text;
+        await ctx.reply('🤖 Анализирую ваш вопрос с учетом контекста команды...');
+
+        const response = await aiService.processQuestionWithContext(question, projectService);
+        
+        await ctx.replyWithMarkdown(`🤖 ${response}`);
+        
+        // Очищаем состояние
+        clearUserState(userId);
+        return; // Не передаем дальше
+      } catch (error) {
+        logger.error('Ошибка при обработке AI вопроса:', error);
+        await ctx.reply('❌ Произошла ошибка при обработке вашего вопроса.');
+        clearUserState(userId);
+        return;
+      }
+    }
+    
+    return next(); // Передаем другим обработчикам
+  });
+
   // Обработка голосовых сообщений для AI
   bot.on('voice', async (ctx, next) => {
     try {
@@ -111,7 +142,28 @@ export function setupAICommands(bot: Telegraf<BotContext>, services: Services) {
 
       const userState = getUserState(userId);
       
-      // Если пользователь НЕ в процессе standup, обрабатываем как AI запрос
+      // Если пользователь в режиме ожидания AI вопроса
+      if (userState?.waitingForAI) {
+        await ctx.reply('🎤 Получил голосовое сообщение! Расшифровываю и обрабатываю через ИИ...');
+        
+        const { text } = await voiceService.processVoiceMessage(ctx);
+        
+        // Обрабатываем расшифрованный текст через AI с контекстом
+        const response = await aiService.processQuestionWithContext(text, projectService);
+        
+        await ctx.replyWithMarkdown(`
+🎤➡️📝 *Расшифровка:* "${text}"
+
+🤖 *Ответ ИИ:*
+${response}
+        `);
+        
+        // Очищаем состояние
+        clearUserState(userId);
+        return; // Не передаем дальше
+      }
+      
+      // Если пользователь НЕ в процессе standup и НЕ в режиме AI, обрабатываем как обычный AI запрос
       if (!userState?.waitingForStandup) {
         await ctx.reply('🎤 Получил голосовое сообщение! Расшифровываю и обрабатываю через ИИ...');
         
@@ -135,6 +187,15 @@ ${response}
     } catch (error) {
       logger.error('Ошибка при обработке голосового AI запроса:', error);
       await ctx.reply('❌ Произошла ошибка при обработке голосового сообщения. Попробуйте еще раз или используйте текстовый ввод.');
+      
+      const userId = ctx.from?.id.toString();
+      if (userId) {
+        const userState = getUserState(userId);
+        if (userState?.waitingForAI) {
+          clearUserState(userId);
+        }
+      }
+      
       return next();
     }
   });

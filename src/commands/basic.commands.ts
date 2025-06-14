@@ -4,7 +4,7 @@ import { Services } from './index';
 import { logger } from '../utils/logger';
 
 export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services) {
-  const { projectService } = services;
+  const { projectService, aiService, voiceService } = services;
 
   // Команда /start
   bot.start(async (ctx) => {
@@ -156,11 +156,183 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
     }
   });
 
-  // Обработка кнопок меню
-  bot.hears('📊 Daily Standup', (ctx) => ctx.reply('Используйте /standup для запуска daily standup'));
-  bot.hears('🚀 Проекты', (ctx) => ctx.reply('Используйте /projects для управления проектами'));
-  bot.hears('👥 Команда', (ctx) => ctx.reply('Используйте /team для просмотра команды'));
-  bot.hears('📈 Отчеты', (ctx) => ctx.reply('Используйте /report для получения отчетов'));
-  bot.hears('🤖 AI Помощник', (ctx) => ctx.reply('Используйте /ai <вопрос> или отправьте голосовое сообщение'));
-  bot.hears('⚙️ Настройки', (ctx) => ctx.reply('Используйте /profile для настройки профиля'));
+  // Обработка кнопок меню - СРАЗУ ВЫПОЛНЯЕМ ДЕЙСТВИЯ
+  
+  // Daily Standup - сразу запускаем standup
+  bot.hears('📊 Daily Standup', async (ctx) => {
+    try {
+      const users = await projectService.getAllUsers();
+      
+      if (users.length === 0) {
+        await ctx.reply('В команде пока никого нет. Добавьте участников командой /start');
+        return;
+      }
+
+      const userTags = users.map(user => {
+        if (user.username) {
+          return `@${user.username}`;
+        }
+        return user.name;
+      }).join(' ');
+      
+      const standupMessage = `
+🌅 <b>Daily Standup</b>
+
+${userTags}
+
+Время для ежедневного стендапа! Пожалуйста, ответьте на вопросы:
+
+1️⃣ <b>Что вы делали вчера?</b>
+2️⃣ <b>Что планируете сегодня?</b>  
+3️⃣ <b>Есть ли блокеры?</b>
+
+Можете ответить текстом или голосовым сообщением 🎤
+
+Для быстрого ответа используйте кнопки ⬇️
+      `;
+
+      await ctx.replyWithHTML(standupMessage,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('📝 Ответить текстом', 'standup_text')],
+          [Markup.button.callback('🎤 Голосовой ответ', 'standup_voice')],
+          [Markup.button.callback('📊 Посмотреть статусы', 'standup_status')]
+        ])
+      );
+    } catch (error) {
+      logger.error('Ошибка при запуске standup через кнопку:', error);
+      await ctx.reply('Ошибка при запуске standup.');
+    }
+  });
+
+  // Проекты - показываем список проектов
+  bot.hears('🚀 Проекты', async (ctx) => {
+    try {
+      const projects = await projectService.getActiveProjects();
+      
+      if (projects.length === 0) {
+        await ctx.reply('Активных проектов пока нет.\n\nИспользуйте /project <название> для создания нового проекта.');
+        return;
+      }
+
+      let message = '🚀 *Активные проекты*\n\n';
+      projects.forEach((project: any, index: number) => {
+        message += `${index + 1}. *${project.name}*\n`;
+        message += `   📝 ${project.description}\n`;
+        message += `   📅 Создан: ${new Date(project.created_at).toLocaleDateString('ru-RU')}\n\n`;
+      });
+
+      await ctx.replyWithMarkdown(message);
+    } catch (error) {
+      logger.error('Ошибка при получении проектов:', error);
+      await ctx.reply('Ошибка при получении списка проектов.');
+    }
+  });
+
+  // Команда - показываем состав команды
+  bot.hears('👥 Команда', async (ctx) => {
+    try {
+      const users = await projectService.getAllUsers();
+      
+      if (users.length === 0) {
+        await ctx.reply('В команде пока никого нет.');
+        return;
+      }
+
+      let teamMessage = '👥 *Состав команды*\n\n';
+      
+      users.forEach((user: any, index: number) => {
+        const usernameDisplay = user.username ? `@${user.username}` : 'без username';
+        const roleEmoji = getRoleEmoji(user.role);
+        teamMessage += `${index + 1}. *${user.name}* (${usernameDisplay})\n   ${roleEmoji} ${user.role}\n\n`;
+      });
+
+      teamMessage += `*Всего участников:* ${users.length}`;
+
+      await ctx.replyWithMarkdown(teamMessage);
+    } catch (error) {
+      logger.error('Ошибка при получении команды:', error);
+      await ctx.reply('Ошибка при получении списка команды.');
+    }
+  });
+
+  // Отчеты - генерируем отчет
+  bot.hears('📈 Отчеты', async (ctx) => {
+    try {
+      await ctx.reply('📋 Генерирую отчет с полным контекстом команды...');
+
+      const summary = await projectService.getTeamSummary();
+      const report = await aiService.generateSummary(summary, projectService);
+
+      await ctx.replyWithMarkdown(report);
+    } catch (error) {
+      logger.error('Ошибка при генерации отчета:', error);
+      await ctx.reply('❌ Ошибка при генерации отчета.');
+    }
+  });
+
+  // AI Помощник - активируем режим ожидания вопроса
+  bot.hears('🤖 AI Помощник', async (ctx) => {
+    const userId = ctx.from?.id.toString();
+    if (userId) {
+      // Устанавливаем состояние ожидания AI вопроса
+      const { setUserState } = require('../middleware');
+      setUserState(userId, {
+        waitingForAI: true
+      });
+    }
+
+    await ctx.reply('🤖 *AI Помощник активирован*\n\nЗадайте ваш вопрос текстом или голосовым сообщением. Я знаю всё о нашем боте и команде!', {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Задайте вопрос ИИ помощнику...'
+      }
+    });
+  });
+
+  // Настройки - показываем профиль
+  bot.hears('⚙️ Настройки', async (ctx) => {
+    try {
+      const user = await projectService.getUserByTelegramId(ctx.from?.id.toString() || '');
+      
+      if (!user) {
+        await ctx.reply('Пользователь не найден. Используйте /start для регистрации.');
+        return;
+      }
+
+      const roleEmoji = getRoleEmoji(user.role);
+      const profileMessage = `
+⚙️ *Настройки профиля*
+
+👤 *Имя:* ${user.name}
+${roleEmoji} *Роль:* ${user.role}
+🌍 *Часовой пояс:* ${user.timezone}
+📅 *Дата регистрации:* ${new Date(user.created_at).toLocaleDateString('ru-RU')}
+
+*Доступные команды:*
+• Изменить роль: обратитесь к администратору
+• Изменить часовой пояс: /settimezone <зона>
+      `;
+
+      await ctx.replyWithMarkdown(profileMessage);
+    } catch (error) {
+      logger.error('Ошибка в настройках:', error);
+      await ctx.reply('Ошибка при получении настроек.');
+    }
+  });
+}
+
+function getRoleEmoji(role: string): string {
+  const roleEmojis: { [key: string]: string } = {
+    'admin': '👑',
+    'project_manager': '📊',
+    'frontend_developer': '🎨',
+    'backend_developer': '⚙️',
+    'designer': '🎭',
+    'marketer': '📈',
+    'producer': '🎬',
+    'psychologist': '🧠'
+  };
+  
+  return roleEmojis[role] || '👤';
 } 
