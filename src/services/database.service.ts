@@ -26,6 +26,9 @@ export interface Sprint {
   id: number;
   project_id: number;
   name: string;
+  goal?: string;
+  hypothesis?: string;
+  target_audience?: string;
   start_date: string;
   end_date: string;
   status: string;
@@ -37,6 +40,7 @@ export interface Task {
   assignee_id: number;
   title: string;
   description: string;
+  zone: string;
   status: string;
   priority: string;
   estimated_hours: number;
@@ -115,9 +119,12 @@ export class DatabaseService {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           project_id INTEGER REFERENCES projects(id),
           name TEXT NOT NULL,
+          goal TEXT,
+          hypothesis TEXT,
+          target_audience TEXT,
           start_date DATE,
           end_date DATE,
-          status TEXT DEFAULT 'planning',
+          status TEXT DEFAULT 'active',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
@@ -129,7 +136,8 @@ export class DatabaseService {
           assignee_id INTEGER REFERENCES users(id),
           title TEXT NOT NULL,
           description TEXT,
-          status TEXT DEFAULT 'todo',
+          zone TEXT NOT NULL,
+          status TEXT DEFAULT 'pending',
           priority TEXT DEFAULT 'medium',
           estimated_hours INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -161,9 +169,51 @@ export class DatabaseService {
         );
       `);
 
+      // МИГРАЦИИ ДЛЯ ОБНОВЛЕНИЯ СУЩЕСТВУЮЩИХ ТАБЛИЦ
+      await this.runMigrations();
+
       logger.info('Таблицы SQLite базы данных инициализированы');
     } catch (error) {
       logger.error('Ошибка при создании таблиц:', error);
+      throw error;
+    }
+  }
+
+  private async runMigrations(): Promise<void> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    try {
+      // Проверяем и добавляем колонки в таблицу sprints
+      const sprintColumns = await this.db.all("PRAGMA table_info(sprints)");
+      const sprintColumnNames = sprintColumns.map((col: any) => col.name);
+      
+      if (!sprintColumnNames.includes('goal')) {
+        await this.db.exec('ALTER TABLE sprints ADD COLUMN goal TEXT');
+        logger.info('Добавлена колонка goal в таблицу sprints');
+      }
+      
+      if (!sprintColumnNames.includes('hypothesis')) {
+        await this.db.exec('ALTER TABLE sprints ADD COLUMN hypothesis TEXT');
+        logger.info('Добавлена колонка hypothesis в таблицу sprints');
+      }
+      
+      if (!sprintColumnNames.includes('target_audience')) {
+        await this.db.exec('ALTER TABLE sprints ADD COLUMN target_audience TEXT');
+        logger.info('Добавлена колонка target_audience в таблицу sprints');
+      }
+
+      // Проверяем и добавляем колонку zone в таблицу tasks
+      const taskColumns = await this.db.all("PRAGMA table_info(tasks)");
+      const taskColumnNames = taskColumns.map((col: any) => col.name);
+      
+      if (!taskColumnNames.includes('zone')) {
+        await this.db.exec('ALTER TABLE tasks ADD COLUMN zone TEXT NOT NULL DEFAULT "разработка"');
+        logger.info('Добавлена колонка zone в таблицу tasks');
+      }
+
+      logger.info('Миграции базы данных выполнены успешно');
+    } catch (error) {
+      logger.error('Ошибка при выполнении миграций:', error);
       throw error;
     }
   }
@@ -262,5 +312,78 @@ export class DatabaseService {
       await this.db.close();
       this.db = null;
     }
+  }
+
+  // МЕТОДЫ ДЛЯ РАБОТЫ СО СПРИНТАМИ
+
+  async createSprint(name: string, startDate: Date, endDate: Date): Promise<Sprint> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    const result = await this.db.run(
+      'INSERT INTO sprints (name, start_date, end_date, status) VALUES (?, ?, ?, ?)',
+      [name, startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0], 'active']
+    );
+    
+    const sprint = await this.db.get('SELECT * FROM sprints WHERE id = ?', [result.lastID]);
+    return sprint as Sprint;
+  }
+
+  async getAllSprints(): Promise<Sprint[]> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    const sprints = await this.db.all('SELECT * FROM sprints ORDER BY created_at DESC');
+    return sprints as Sprint[];
+  }
+
+  async getCurrentSprint(): Promise<Sprint | null> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    const sprint = await this.db.get('SELECT * FROM sprints WHERE status = ? ORDER BY created_at DESC LIMIT 1', ['active']);
+    return sprint as Sprint || null;
+  }
+
+  async updateSprintGoal(sprintId: number, goal: string, hypothesis: string, targetAudience: string): Promise<Sprint | null> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    await this.db.run(
+      'UPDATE sprints SET goal = ?, hypothesis = ?, target_audience = ? WHERE id = ?',
+      [goal, hypothesis, targetAudience, sprintId]
+    );
+    
+    const sprint = await this.db.get('SELECT * FROM sprints WHERE id = ?', [sprintId]);
+    return sprint as Sprint || null;
+  }
+
+  // МЕТОДЫ ДЛЯ РАБОТЫ С ЗАДАЧАМИ
+
+  async addSprintTask(sprintId: number, title: string, zone: string): Promise<Task> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    const result = await this.db.run(
+      'INSERT INTO tasks (sprint_id, title, zone, status) VALUES (?, ?, ?, ?)',
+      [sprintId, title, zone, 'pending']
+    );
+    
+    const task = await this.db.get('SELECT * FROM tasks WHERE id = ?', [result.lastID]);
+    return task as Task;
+  }
+
+  async getSprintTasks(sprintId: number): Promise<Task[]> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    const tasks = await this.db.all('SELECT * FROM tasks WHERE sprint_id = ? ORDER BY created_at', [sprintId]);
+    return tasks as Task[];
+  }
+
+  async updateTaskStatus(taskId: number, status: 'pending' | 'in_progress' | 'completed'): Promise<Task | null> {
+    if (!this.db) throw new Error('База данных не подключена');
+    
+    await this.db.run(
+      'UPDATE tasks SET status = ? WHERE id = ?',
+      [status, taskId]
+    );
+    
+    const task = await this.db.get('SELECT * FROM tasks WHERE id = ?', [taskId]);
+    return task as Task || null;
   }
 } 

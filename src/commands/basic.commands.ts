@@ -44,8 +44,9 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
       await ctx.replyWithMarkdown(welcomeMessage, 
         Markup.keyboard([
           ['📊 Daily Standup', '🚀 Проекты'],
-          ['👥 Команда', '📈 Отчеты'],
-          ['🤖 AI Помощник', '⚙️ Настройки']
+          ['🏃‍♂️ Спринты', '👥 Команда'],
+          ['📈 Отчеты', '🤖 AI Помощник'],
+          ['⚙️ Настройки']
         ]).resize()
       );
 
@@ -70,6 +71,20 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
 /projects - список проектов
 /project <название> - создать проект
 /tasks - мои задачи
+
+*🏃‍♂️ Спринты (Agile):*
+/sprint <название> - создать новый спринт
+/sprints - список всех спринтов
+/currentsprint - текущий активный спринт
+/sprintgoal - добавить цель и гипотезу
+/sprinttasks - управление задачами спринта
+/addtask <зона> <описание> - добавить задачу
+
+*📝 Управление задачами:*
+/mytasks - мои задачи в текущем спринте
+/starttask <ID> - начать работу над задачей
+/completetask <ID> - отметить задачу выполненной
+/pausetask <ID> - поставить задачу на паузу
 
 *📊 Daily Standup:*
 /standup - запустить standup
@@ -249,8 +264,78 @@ ${userTags}
 
       await ctx.replyWithMarkdown(message);
     } catch (error) {
-      logger.error('Ошибка при получении проектов:', error);
+      logger.error('Ошибка при получении проектов через кнопку:', error);
       await ctx.reply('Ошибка при получении списка проектов.');
+    }
+  });
+
+  // Спринты - показываем текущий спринт
+  bot.hears('🏃‍♂️ Спринты', async (ctx) => {
+    try {
+      const sprint = await projectService.getCurrentSprint();
+      
+      if (!sprint) {
+        await ctx.reply(`
+🏃‍♂️ *Спринты*
+
+Активных спринтов пока нет.
+
+*Команды для работы со спринтами:*
+• \`/sprint <название>\` - создать новый спринт
+• \`/sprints\` - посмотреть все спринты
+
+*Пример:*
+\`/sprint Тестирование гипотезы о молодой аудитории\`
+        `, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const tasks = await projectService.getSprintTasks(sprint.id);
+      
+      let message = `🏃‍♂️ *Текущий спринт: ${sprint.name}*\n\n`;
+      message += `📅 *Период:* ${new Date(sprint.start_date).toLocaleDateString('ru-RU')} - ${new Date(sprint.end_date).toLocaleDateString('ru-RU')}\n\n`;
+      
+      if (sprint.goal) {
+        message += `🎯 *Цель:*\n${sprint.goal}\n\n`;
+      }
+      
+      if (sprint.hypothesis) {
+        message += `🔬 *Гипотеза:*\n${sprint.hypothesis}\n\n`;
+      }
+      
+      if (sprint.target_audience) {
+        message += `👥 *Целевая аудитория:*\n${sprint.target_audience}\n\n`;
+      }
+
+      // Показываем задачи по зонам ответственности
+      if (tasks.length > 0) {
+        message += '*📋 Задачи по зонам ответственности:*\n\n';
+        
+        const zones = ['маркетинг', 'психология', 'разработка', 'дизайн', 'продакшн'];
+        zones.forEach(zone => {
+          const zoneTasks = tasks.filter((task: any) => task.zone === zone);
+          if (zoneTasks.length > 0) {
+            const zoneEmoji = getZoneEmoji(zone);
+            message += `${zoneEmoji} *${zone.charAt(0).toUpperCase() + zone.slice(1)}:*\n`;
+            zoneTasks.forEach((task: any) => {
+              const statusEmoji = task.status === 'completed' ? '✅' : task.status === 'in_progress' ? '🔄' : '⏳';
+              message += `  ${statusEmoji} ${task.title}\n`;
+            });
+            message += '\n';
+          }
+        });
+      }
+
+      message += '*Команды:*\n';
+      message += '• `/sprintgoal` - изменить цель\n';
+      message += '• `/sprinttasks` - управление задачами\n';
+      message += '• `/addtask <зона> <описание>` - добавить задачу';
+
+      await ctx.replyWithMarkdown(message);
+
+    } catch (error) {
+      logger.error('Ошибка при получении спринтов через кнопку:', error);
+      await ctx.reply('Ошибка при получении информации о спринтах.');
     }
   });
 
@@ -361,4 +446,16 @@ function getRoleEmoji(role: string): string {
   };
   
   return roleEmojis[role] || '👤';
+}
+
+function getZoneEmoji(zone: string): string {
+  const zoneEmojis: { [key: string]: string } = {
+    'маркетинг': '📈',
+    'психология': '🧠',
+    'разработка': '⚙️',
+    'дизайн': '🎨',
+    'продакшн': '🎬'
+  };
+  
+  return zoneEmojis[zone] || '👤';
 } 

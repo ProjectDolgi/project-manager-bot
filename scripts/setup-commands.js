@@ -47,6 +47,46 @@ const commands = [
     description: '📁 Создать новый проект'
   },
   {
+    command: 'sprint',
+    description: '🏃‍♂️ Создать новый спринт'
+  },
+  {
+    command: 'sprints',
+    description: '📋 Список всех спринтов'
+  },
+  {
+    command: 'currentsprint',
+    description: '🎯 Текущий активный спринт'
+  },
+  {
+    command: 'sprintgoal',
+    description: '🎯 Добавить цель и гипотезу к спринту'
+  },
+  {
+    command: 'sprinttasks',
+    description: '📝 Управление задачами спринта'
+  },
+  {
+    command: 'addtask',
+    description: '➕ Добавить задачу к спринту'
+  },
+  {
+    command: 'mytasks',
+    description: '📝 Мои задачи в текущем спринте'
+  },
+  {
+    command: 'starttask',
+    description: '🔄 Начать работу над задачей'
+  },
+  {
+    command: 'completetask',
+    description: '✅ Отметить задачу выполненной'
+  },
+  {
+    command: 'pausetask',
+    description: '⏸ Поставить задачу на паузу'
+  },
+  {
     command: 'ai',
     description: '🤖 Задать вопрос ИИ'
   },

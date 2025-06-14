@@ -151,7 +151,70 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
     if (!userId) return next();
 
     const userState = getUserState(userId);
-    if (!userState?.waitingForStandup) return next();
+    if (!userState) return next();
+
+    // Обработка цели спринта
+    if (userState.waitingForSprintGoal) {
+      try {
+        const text = ctx.message.text;
+        
+        // Парсим текст в формате ЦЕЛЬ: ... ГИПОТЕЗА: ... АУДИТОРИЯ: ...
+        const goalMatch = text.match(/ЦЕЛЬ:\s*(.+?)(?=ГИПОТЕЗА:|$)/s);
+        const hypothesisMatch = text.match(/ГИПОТЕЗА:\s*(.+?)(?=АУДИТОРИЯ:|$)/s);
+        const audienceMatch = text.match(/АУДИТОРИЯ:\s*(.+?)$/s);
+        
+        if (!goalMatch || !hypothesisMatch || !audienceMatch) {
+          await ctx.reply(`
+❌ *Неверный формат!*
+
+Используйте формат:
+\`\`\`
+ЦЕЛЬ: Описание цели спринта
+
+ГИПОТЕЗА: Наша гипотеза о пользователях
+
+АУДИТОРИЯ: Описание целевого сегмента
+\`\`\`
+          `, { parse_mode: 'Markdown' });
+          return;
+        }
+        
+        const goal = goalMatch[1].trim();
+        const hypothesis = hypothesisMatch[1].trim();
+        const audience = audienceMatch[1].trim();
+        
+        // Обновляем спринт
+        const updatedSprint = await projectService.updateSprintGoal(userState.sprintId, goal, hypothesis, audience);
+        
+        if (updatedSprint) {
+          await ctx.replyWithMarkdown(`
+✅ *Цель спринта обновлена!*
+
+🎯 *Цель:* ${goal}
+
+🔬 *Гипотеза:* ${hypothesis}
+
+👥 *Целевая аудитория:* ${audience}
+
+*Следующие шаги:*
+• \`/sprinttasks\` - добавить задачи по зонам
+• \`/currentsprint\` - посмотреть текущий спринт
+          `);
+        }
+        
+        clearUserState(userId);
+        return; // Не передаем дальше
+        
+      } catch (error) {
+        logger.error('Ошибка при обновлении цели спринта:', error);
+        clearUserState(userId);
+        await ctx.reply('Произошла ошибка при сохранении цели спринта. Попробуйте снова.');
+        return;
+      }
+    }
+
+    // Обработка standup
+    if (!userState.waitingForStandup) return next();
 
     try {
       const text = ctx.message.text;

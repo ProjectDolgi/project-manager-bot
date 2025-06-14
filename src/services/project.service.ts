@@ -176,4 +176,96 @@ export class ProjectService {
 
     return message;
   }
+
+  // МЕТОДЫ ДЛЯ РАБОТЫ СО СПРИНТАМИ
+
+  async createSprint(name: string): Promise<Sprint> {
+    try {
+      // Создаем спринт на неделю (с понедельника по воскресенье)
+      const now = new Date();
+      const startDate = new Date(now);
+      const endDate = new Date(now);
+      endDate.setDate(startDate.getDate() + 7);
+
+      const sprint = await this.dbService.createSprint(name, startDate, endDate);
+      logger.info(`Создан новый спринт: ${name}`);
+      return sprint;
+    } catch (error) {
+      logger.error('Ошибка при создании спринта:', error);
+      throw error;
+    }
+  }
+
+  async getAllSprints(): Promise<Sprint[]> {
+    return await this.dbService.getAllSprints();
+  }
+
+  async getCurrentSprint(): Promise<Sprint | null> {
+    return await this.dbService.getCurrentSprint();
+  }
+
+  async getSprintTasks(sprintId: number): Promise<Task[]> {
+    return await this.dbService.getSprintTasks(sprintId);
+  }
+
+  async addSprintTask(sprintId: number, title: string, zone: string): Promise<Task> {
+    try {
+      const task = await this.dbService.addSprintTask(sprintId, title, zone);
+      logger.info(`Добавлена задача к спринту ${sprintId}: ${title} (${zone})`);
+      return task;
+    } catch (error) {
+      logger.error('Ошибка при добавлении задачи к спринту:', error);
+      throw error;
+    }
+  }
+
+  async updateSprintGoal(sprintId: number, goal: string, hypothesis: string, targetAudience: string): Promise<Sprint | null> {
+    try {
+      const sprint = await this.dbService.updateSprintGoal(sprintId, goal, hypothesis, targetAudience);
+      if (sprint) {
+        logger.info(`Обновлена цель спринта ${sprintId}`);
+      }
+      return sprint;
+    } catch (error) {
+      logger.error('Ошибка при обновлении цели спринта:', error);
+      throw error;
+    }
+  }
+
+  async updateTaskStatus(taskId: number, status: 'pending' | 'in_progress' | 'completed'): Promise<Task | null> {
+    try {
+      const task = await this.dbService.updateTaskStatus(taskId, status);
+      if (task) {
+        logger.info(`Обновлен статус задачи ${taskId}: ${status}`);
+      }
+      return task;
+    } catch (error) {
+      logger.error('Ошибка при обновлении статуса задачи:', error);
+      throw error;
+    }
+  }
+
+  async getSprintProgress(sprintId: number): Promise<any> {
+    try {
+      const tasks = await this.getSprintTasks(sprintId);
+      const totalTasks = tasks.length;
+      const completedTasks = tasks.filter(task => task.status === 'completed').length;
+      const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
+      const pendingTasks = tasks.filter(task => task.status === 'pending').length;
+
+      const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+      return {
+        totalTasks,
+        completedTasks,
+        inProgressTasks,
+        pendingTasks,
+        progress,
+        tasks
+      };
+    } catch (error) {
+      logger.error('Ошибка при получении прогресса спринта:', error);
+      throw error;
+    }
+  }
 }
