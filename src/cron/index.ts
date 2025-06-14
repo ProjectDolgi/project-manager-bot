@@ -7,27 +7,34 @@ import { logger } from '../utils/logger';
 
 export function setupCronJobs(bot: Telegraf<BotContext>, dbService: DatabaseService) {
   
-  // Daily Standup напоминание (каждый день в указанное время)
-  cron.schedule('0 9 * * 1-5', async () => {
+  // Daily Standup напоминание (каждый день в 14:00)
+  cron.schedule('0 14 * * *', async () => {
     try {
       logger.info('Запуск автоматического Daily Standup');
       
       const users = await dbService.getAllUsers();
       
       if (users.length === 0) {
+        logger.info('Нет пользователей для тегирования');
         return;
       }
 
       // Отправляем напоминание в основной чат (если настроен)
       if (config.ADMIN_CHAT_ID) {
-        const userTags = users.map(user => `@${user.name.replace(/\s+/g, '_')}`).join(' ');
+        // Используем username если есть, иначе имя
+        const userTags = users.map(user => {
+          if (user.username) {
+            return `@${user.username}`;
+          }
+          return `@${user.name.replace(/\s+/g, '_')}`;
+        }).join(' ');
         
         const message = `
-🌅 *Автоматический Daily Standup*
+🌅 <b>Daily Standup</b>
 
 ${userTags}
 
-Доброе утро, команда! Время для ежедневного стендапа.
+Добрый день, команда! Время для ежедневного стендапа.
 
 Пожалуйста, ответьте на вопросы:
 1️⃣ Что вы делали вчера?
@@ -37,7 +44,10 @@ ${userTags}
 Используйте /standup для участия.
         `;
 
-        await bot.telegram.sendMessage(config.ADMIN_CHAT_ID, message, { parse_mode: 'Markdown' });
+        await bot.telegram.sendMessage(config.ADMIN_CHAT_ID, message, { parse_mode: 'HTML' });
+        logger.info(`✅ Отправлено сообщение с тегами: ${userTags}`);
+      } else {
+        logger.warn('⚠️ ADMIN_CHAT_ID не настроен в .env файле');
       }
 
     } catch (error) {
@@ -59,15 +69,15 @@ ${userTags}
       const today = new Date();
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       
-      let weeklyReport = '📊 *Еженедельный отчет*\n\n';
+      let weeklyReport = '📊 <b>Еженедельный отчет</b>\n\n';
       weeklyReport += `📅 Период: ${weekAgo.toLocaleDateString('ru-RU')} - ${today.toLocaleDateString('ru-RU')}\n`;
       weeklyReport += `👥 Участников в команде: ${users.length}\n\n`;
       
       // Здесь можно добавить более детальную статистику
-      weeklyReport += '*Основные достижения недели будут добавлены в следующих версиях*\n\n';
+      weeklyReport += '<b>Основные достижения недели будут добавлены в следующих версиях</b>\n\n';
       weeklyReport += 'Хорошей работы на следующей неделе! 💪';
 
-      await bot.telegram.sendMessage(config.SUMMARY_CHAT_ID, weeklyReport, { parse_mode: 'Markdown' });
+      await bot.telegram.sendMessage(config.SUMMARY_CHAT_ID, weeklyReport, { parse_mode: 'HTML' });
 
     } catch (error) {
       logger.error('Ошибка в cron задаче еженедельного отчета:', error);
@@ -91,7 +101,7 @@ ${userTags}
         const userTags = usersWithoutStatus.map(user => `@${user.name.replace(/\s+/g, '_')}`).join(' ');
         
         const message = `
-⏰ *Напоминание о Daily Standup*
+⏰ <b>Напоминание о Daily Standup</b>
 
 ${userTags}
 
@@ -100,7 +110,7 @@ ${userTags}
 Это поможет команде быть в курсе прогресса! 📈
         `;
 
-        await bot.telegram.sendMessage(config.ADMIN_CHAT_ID, message, { parse_mode: 'Markdown' });
+        await bot.telegram.sendMessage(config.ADMIN_CHAT_ID, message, { parse_mode: 'HTML' });
       }
 
     } catch (error) {

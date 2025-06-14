@@ -156,6 +156,32 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
     }
   });
 
+  // ВРЕМЕННАЯ команда для получения Chat ID
+  bot.command('chatid', async (ctx) => {
+    try {
+      const chatId = ctx.chat.id;
+      const chatType = ctx.chat.type;
+      const chatTitle = 'title' in ctx.chat ? ctx.chat.title : 'Личный чат';
+      
+      const message = `
+🆔 *Информация о чате*
+
+*Chat ID:* \`${chatId}\`
+*Тип чата:* ${chatType}
+*Название:* ${chatTitle}
+
+📋 *Скопируйте Chat ID и добавьте в .env файл:*
+\`ADMIN_CHAT_ID=${chatId}\`
+      `;
+
+      await ctx.replyWithMarkdown(message);
+
+    } catch (error) {
+      logger.error('Ошибка в команде /chatid:', error);
+      await ctx.reply('Ошибка при получении Chat ID.');
+    }
+  });
+
   // Обработка кнопок меню - СРАЗУ ВЫПОЛНЯЕМ ДЕЙСТВИЯ
   
   // Daily Standup - сразу запускаем standup

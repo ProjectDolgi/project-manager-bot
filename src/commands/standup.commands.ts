@@ -239,36 +239,37 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
         
         const standupData = await voiceService.processVoiceStandup(ctx);
         
-        // Сохраняем в базу данных
-        const user = await projectService.getUserByTelegramId(userId);
-        if (user) {
-          await projectService.saveDailyStatus(
-            user.id,
-            standupData.yesterday,
-            standupData.today,
-            standupData.blockers,
-            standupData.mood
-          );
-          
-          const moodEmoji = standupData.mood >= 8 ? '😊' : standupData.mood >= 6 ? '😐' : '😞';
-          
-          await ctx.replyWithMarkdown(`
-✅ *Голосовой standup обработан!*
+        // Показываем результат анализа и спрашиваем подтверждение настроения
+        const moodEmoji = standupData.mood >= 8 ? '😊' : standupData.mood >= 6 ? '😐' : '😞';
+        
+        await ctx.replyWithMarkdown(`
+🎤➡️📝 *Голосовой standup проанализирован!*
 
-📝 *Расшифровка:*
+*Расшифровка:*
 • *Вчера:* ${standupData.yesterday}
 • *Сегодня:* ${standupData.today}
 • *Блокеры:* ${standupData.blockers || 'Нет'}
-• *Настроение:* ${moodEmoji} ${standupData.mood}/10
+• *Настроение:* ${moodEmoji} ${standupData.mood}/10 (определено автоматически)
 
-Используйте /teamstatus чтобы посмотреть статус всей команды.
-          `);
-        }
+*Подтвердите настроение или введите новую оценку от 1 до 10:*
+        `, {
+          reply_markup: {
+            force_reply: true,
+            input_field_placeholder: 'Введите число от 1 до 10 или нажмите Enter для подтверждения...'
+          }
+        });
         
-        // Очищаем состояние если было
-        if (userState?.waitingForStandup) {
-          clearUserState(userId);
-        }
+        // Сохраняем данные в состоянии для подтверждения
+        setUserState(userId, {
+          waitingForStandup: true,
+          standupStep: 'mood_confirmation',
+          standupData: {
+            yesterday: standupData.yesterday,
+            today: standupData.today,
+            blockers: standupData.blockers,
+            suggestedMood: standupData.mood
+          }
+        });
         
         return; // Не передаем дальше
       }
