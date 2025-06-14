@@ -26,22 +26,22 @@ export function setupStandupCommands(bot: Telegraf<BotContext>, services: Servic
       }).join(' ');
       
       const standupMessage = `
-🌅 *Daily Standup*
+🌅 <b>Daily Standup</b>
 
 ${userTags}
 
 Время для ежедневного стендапа! Пожалуйста, ответьте на вопросы:
 
-1️⃣ *Что вы делали вчера?*
-2️⃣ *Что планируете сегодня?*  
-3️⃣ *Есть ли блокеры?*
+1️⃣ <b>Что вы делали вчера?</b>
+2️⃣ <b>Что планируете сегодня?</b>  
+3️⃣ <b>Есть ли блокеры?</b>
 
 Можете ответить текстом или голосовым сообщением 🎤
 
 Для быстрого ответа используйте кнопки ⬇️
       `;
 
-      await ctx.replyWithMarkdown(standupMessage,
+      await ctx.replyWithHTML(standupMessage,
         Markup.inlineKeyboard([
           [Markup.button.callback('📝 Ответить текстом', 'standup_text')],
           [Markup.button.callback('🎤 Голосовой ответ', 'standup_voice')],
