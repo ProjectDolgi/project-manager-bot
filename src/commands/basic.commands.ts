@@ -2,6 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { BotContext } from '../index';
 import { Services } from './index';
 import { logger } from '../utils/logger';
+import { escapeMarkdown } from '../utils/escapeMarkdown';
 
 export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services) {
   const { projectService, aiService, voiceService } = services;
@@ -157,8 +158,8 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
       let teamMessage = '👥 *Состав команды*\n\n';
       
       users.forEach((user, index) => {
-        const usernameDisplay = user.username ? `@${user.username}` : 'без username';
-        teamMessage += `${index + 1}. *${user.name}* (${usernameDisplay}) - ${user.role}\n`;
+        const usernameDisplay = user.username ? `@${escapeMarkdown(user.username)}` : 'без username';
+        teamMessage += `${index + 1}. *${escapeMarkdown(user.name)}* (${usernameDisplay}) - ${escapeMarkdown(user.role)}\n`;
       });
 
       teamMessage += `\n*Всего участников:* ${users.length}`;
@@ -352,9 +353,9 @@ ${userTags}
       let teamMessage = '👥 *Состав команды*\n\n';
       
       users.forEach((user: any, index: number) => {
-        const usernameDisplay = user.username ? `@${user.username}` : 'без username';
+        const usernameDisplay = user.username ? `@${escapeMarkdown(user.username)}` : 'без username';
         const roleEmoji = getRoleEmoji(user.role);
-        teamMessage += `${index + 1}. *${user.name}* (${usernameDisplay})\n   ${roleEmoji} ${user.role}\n\n`;
+        teamMessage += `${index + 1}. *${escapeMarkdown(user.name)}* (${usernameDisplay})\n   ${roleEmoji} ${escapeMarkdown(user.role)}\n\n`;
       });
 
       teamMessage += `*Всего участников:* ${users.length}`;

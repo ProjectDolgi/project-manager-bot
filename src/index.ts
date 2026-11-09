@@ -82,20 +82,20 @@ class ProjectManagerBot {
       await this.setupBotCommands();
 
       // Запуск бота
-      if (config.NODE_ENV === 'production') {
-        // Production: webhook
+      if (config.NODE_ENV === 'production' && config.WEBHOOK_URL) {
+        // Production: webhook (только если задан WEBHOOK_URL)
         await this.bot.launch({
           webhook: {
             domain: config.WEBHOOK_URL,
             port: config.PORT
           }
         });
+        logger.info(`🚀 Проджект менеджер бот запущен в webhook режиме на ${config.WEBHOOK_URL}`);
       } else {
-        // Development: polling
+        // Development или production без WEBHOOK_URL: polling
         await this.bot.launch();
+        logger.info('🚀 Проджект менеджер бот запущен в polling режиме');
       }
-
-      logger.info('🚀 Проджект менеджер бот запущен!');
 
       // Graceful shutdown
       process.once('SIGINT', () => this.bot.stop('SIGINT'));

@@ -2,6 +2,7 @@ import { Telegraf } from 'telegraf';
 import { BotContext } from '../index';
 import { Services } from './index';
 import { logger } from '../utils/logger';
+import { escapeMarkdown } from '../utils/escapeMarkdown';
 
 export function setupAdminCommands(bot: Telegraf<BotContext>, services: Services) {
   const { projectService } = services;
@@ -94,8 +95,8 @@ export function setupAdminCommands(bot: Telegraf<BotContext>, services: Services
         await ctx.replyWithMarkdown(`
 ✅ *Роль успешно изменена!*
 
-👤 *Пользователь:* ${updatedUser.name}
-${roleEmoji} *Новая роль:* \`${newRole}\`
+👤 *Пользователь:* ${escapeMarkdown(updatedUser.name)}
+${roleEmoji} *Новая роль:* \`${escapeMarkdown(newRole)}\`
 
 Изменения вступили в силу немедленно.
         `);
@@ -105,7 +106,7 @@ ${roleEmoji} *Новая роль:* \`${newRole}\`
           try {
             await bot.telegram.sendMessage(
               targetUser.telegram_id,
-              `🔄 *Ваша роль в команде изменена*\n\n${roleEmoji} *Новая роль:* \`${newRole}\`\n\nИзменил: ${currentUser.name}`,
+              `🔄 *Ваша роль в команде изменена*\n\n${roleEmoji} *Новая роль:* \`${escapeMarkdown(newRole)}\`\n\nИзменил: ${escapeMarkdown(currentUser.name)}`,
               { parse_mode: 'Markdown' }
             );
           } catch (error) {
@@ -180,17 +181,17 @@ ${roleEmoji} *Новая роль:* \`${newRole}\`
         await ctx.replyWithMarkdown(`
 🎉 *Пользователь повышен до администратора!*
 
-👤 *Пользователь:* ${updatedUser.name}
+👤 *Пользователь:* ${escapeMarkdown(updatedUser.name)}
 👑 *Новая роль:* \`admin\`
 
-Теперь ${updatedUser.name} может управлять ролями других пользователей.
+Теперь ${escapeMarkdown(updatedUser.name)} может управлять ролями других пользователей.
         `);
 
         // Уведомляем пользователя
         try {
           await bot.telegram.sendMessage(
             targetUser.telegram_id,
-            `🎉 *Поздравляем!*\n\nВы повышены до роли администратора!\n👑 Теперь вы можете управлять командой.\n\nПовысил: ${currentUser.name}`,
+            `🎉 *Поздравляем!*\n\nВы повышены до роли администратора!\n👑 Теперь вы можете управлять командой.\n\nПовысил: ${escapeMarkdown(currentUser.name)}`,
             { parse_mode: 'Markdown' }
           );
         } catch (error) {
@@ -247,11 +248,11 @@ ${roleEmoji} *Новая роль:* \`${newRole}\`
       roleOrder.forEach(role => {
         if (roleGroups[role] && roleGroups[role].length > 0) {
           const roleEmoji = getRoleEmoji(role);
-          message += `${roleEmoji} *${role}* (${roleGroups[role].length}):\n`;
+          message += `${roleEmoji} *${escapeMarkdown(role)}* (${roleGroups[role].length}):\n`;
           
           roleGroups[role].forEach(user => {
-            const usernameDisplay = user.username ? `@${user.username}` : 'без username';
-            message += `  • ${user.name} (${usernameDisplay})\n`;
+            const usernameDisplay = user.username ? `@${escapeMarkdown(user.username)}` : 'без username';
+            message += `  • ${escapeMarkdown(user.name)} (${usernameDisplay})\n`;
           });
           message += '\n';
         }
