@@ -7,7 +7,8 @@ exports.clearUserState = clearUserState;
 const logger_1 = require("../utils/logger");
 // Хранилище состояний пользователей
 const userStates = new Map();
-function setupMiddleware(bot, dbService) {
+const ALLOWED_COMMANDS = ['/start', '/subscribe', '/subscription', '/help'];
+function setupMiddleware(bot, dbService, subscriptionService) {
     // Middleware для логирования
     bot.use(async (ctx, next) => {
         const start = Date.now();
@@ -30,12 +31,26 @@ function setupMiddleware(bot, dbService) {
         const ms = Date.now() - start;
         logger_1.logger.info(`Обработано за ${ms}ms`);
     });
-    // Middleware для проверки пользователя и состояний
+    // Middleware для проверки пользователя, подписки и состояний
     bot.use(async (ctx, next) => {
         if (ctx.from) {
             try {
                 const user = await dbService.getUserByTelegramId(ctx.from.id.toString());
                 ctx.user = user;
+                // Проверяем подписку для команд
+                if (subscriptionService && user && ctx.message && 'text' in ctx.message) {
+                    const text = ctx.message.text;
+                    if (text.startsWith('/')) {
+                        const command = text.split(' ')[0].toLowerCase();
+                        if (!ALLOWED_COMMANDS.includes(command)) {
+                            const hasActive = await subscriptionService.hasActiveSubscription(user.id);
+                            if (!hasActive) {
+                                await ctx.reply('❌ Доступ заблокирован.\n\nДля использования бота оформите подписку: /subscribe\n\n🎁 Пробный период 1 сутки предоставляется автоматически при регистрации.');
+                                return;
+                            }
+                        }
+                    }
+                }
                 // Получаем состояние пользователя
                 const userState = userStates.get(ctx.from.id.toString());
                 if (userState) {

@@ -37,7 +37,7 @@ exports.setupCronJobs = setupCronJobs;
 const cron = __importStar(require("node-cron"));
 const config_1 = require("../config/config");
 const logger_1 = require("../utils/logger");
-function setupCronJobs(bot, dbService) {
+function setupCronJobs(bot, dbService, subscriptionService, paymentService) {
     // Daily Standup напоминание (каждый день в 14:00)
     cron.schedule('0 14 * * *', async () => {
         try {
@@ -128,6 +128,19 @@ ${userTags}
         }
         catch (error) {
             logger_1.logger.error('Ошибка в cron задаче напоминания:', error);
+        }
+    });
+    // Автопродление подписок (каждый день в 10:00)
+    cron.schedule('0 10 * * *', async () => {
+        try {
+            logger_1.logger.info('Проверка подписок для автопродления');
+            if (paymentService) {
+                await paymentService.processAutoRenewal(bot);
+                await paymentService.processExpiredSubscriptions(bot);
+            }
+        }
+        catch (error) {
+            logger_1.logger.error('Ошибка в cron задаче автопродления:', error);
         }
     });
     logger_1.logger.info('Cron задачи настроены');

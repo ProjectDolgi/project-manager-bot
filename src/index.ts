@@ -4,6 +4,8 @@ import { DatabaseService } from './services/database.service';
 import { AIService } from './services/ai.service';
 import { ProjectService } from './services/project.service';
 import { VoiceService } from './services/voice.service';
+import { SubscriptionService } from './services/subscription.service';
+import { PaymentService } from './services/payment.service';
 import { setupCommands } from './commands';
 import { setupMiddleware } from './middleware';
 import { setupCronJobs } from './cron';
@@ -13,6 +15,8 @@ import { logger } from './utils/logger';
 const BOT_COMMANDS = [
   { command: 'start', description: '🚀 Начать работу с ботом' },
   { command: 'help', description: '❓ Справка по всем командам' },
+  { command: 'subscribe', description: '💳 Оформить подписку' },
+  { command: 'subscription', description: '📋 Моя подписка' },
   { command: 'profile', description: '👤 Настройки профиля' },
   { command: 'team', description: '👥 Состав команды' },
   { command: 'standup', description: '📊 Запуск daily standup' },
@@ -40,6 +44,8 @@ class ProjectManagerBot {
   private aiService: AIService;
   private projectService: ProjectService;
   private voiceService: VoiceService;
+  private subscriptionService: SubscriptionService;
+  private paymentService: PaymentService;
 
   constructor() {
     this.bot = new Telegraf<BotContext>(config.BOT_TOKEN);
@@ -47,6 +53,8 @@ class ProjectManagerBot {
     this.aiService = new AIService();
     this.projectService = new ProjectService(this.dbService);
     this.voiceService = new VoiceService();
+    this.subscriptionService = new SubscriptionService(this.dbService);
+    this.paymentService = new PaymentService(this.dbService, this.subscriptionService);
   }
 
   private async setupBotCommands() {
@@ -65,18 +73,20 @@ class ProjectManagerBot {
       logger.info('База данных подключена');
 
       // Настройка middleware
-      setupMiddleware(this.bot, this.dbService);
+      setupMiddleware(this.bot, this.dbService, this.subscriptionService);
 
       // Настройка команд
       setupCommands(this.bot, {
         dbService: this.dbService,
         aiService: this.aiService,
         projectService: this.projectService,
-        voiceService: this.voiceService
+        voiceService: this.voiceService,
+        subscriptionService: this.subscriptionService,
+        paymentService: this.paymentService
       });
 
       // Настройка cron задач
-      setupCronJobs(this.bot, this.dbService);
+      setupCronJobs(this.bot, this.dbService, this.subscriptionService, this.paymentService);
 
       // Настройка команд автокомплита
       await this.setupBotCommands();

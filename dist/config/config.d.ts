@@ -11,6 +11,12 @@ export declare const config: {
     JIRA_URL: string;
     JIRA_TOKEN: string;
     GITHUB_TOKEN: string;
+    PAYMENT_PROVIDER_TOKEN: string;
+    YOOKASSA_SHOP_ID: string;
+    YOOKASSA_SECRET_KEY: string;
+    TRIAL_DAYS: number;
+    MONTHLY_PRICE: number;
+    YEARLY_PRICE: number;
     NODE_ENV: string;
     PORT: number;
 };

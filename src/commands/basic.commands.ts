@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 import { escapeMarkdown } from '../utils/escapeMarkdown';
 
 export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services) {
-  const { projectService, aiService, voiceService } = services;
+  const { projectService, aiService, voiceService, subscriptionService } = services;
 
   // Команда /start
   bot.start(async (ctx) => {
@@ -14,12 +14,17 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
       if (!user) return;
 
       // Регистрируем пользователя
-      await projectService.registerUser(
+      const dbUser = await projectService.registerUser(
         user.id.toString(),
         user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
         user.username,
         'project_manager'
       );
+
+      // Создаём пробную подписку
+      if (subscriptionService) {
+        await subscriptionService.ensureTrialSubscription(dbUser.id);
+      }
 
       const welcomeMessage = `
 🚀 *Добро пожаловать в Проджект Менеджер Бот!*
@@ -66,7 +71,14 @@ export function setupBasicCommands(bot: Telegraf<BotContext>, services: Services
 /start - начать работу с ботом
 /help - эта справка
 /profile - настройка профиля
+/subscribe - оформить подписку
+/subscription - моя подписка
 /status - текущий статус
+
+*💳 Подписка:*
+🎁 Пробный период 1 сутки при регистрации
+💳 Месячная подписка — 390 ₽
+⭐ Годовая подписка — 3500 ₽
 
 *🚀 Проекты:*
 /projects - список проектов

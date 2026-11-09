@@ -6,6 +6,8 @@ const database_service_1 = require("./services/database.service");
 const ai_service_1 = require("./services/ai.service");
 const project_service_1 = require("./services/project.service");
 const voice_service_1 = require("./services/voice.service");
+const subscription_service_1 = require("./services/subscription.service");
+const payment_service_1 = require("./services/payment.service");
 const commands_1 = require("./commands");
 const middleware_1 = require("./middleware");
 const cron_1 = require("./cron");
@@ -14,6 +16,8 @@ const logger_1 = require("./utils/logger");
 const BOT_COMMANDS = [
     { command: 'start', description: '🚀 Начать работу с ботом' },
     { command: 'help', description: '❓ Справка по всем командам' },
+    { command: 'subscribe', description: '💳 Оформить подписку' },
+    { command: 'subscription', description: '📋 Моя подписка' },
     { command: 'profile', description: '👤 Настройки профиля' },
     { command: 'team', description: '👥 Состав команды' },
     { command: 'standup', description: '📊 Запуск daily standup' },
@@ -35,6 +39,8 @@ class ProjectManagerBot {
         this.aiService = new ai_service_1.AIService();
         this.projectService = new project_service_1.ProjectService(this.dbService);
         this.voiceService = new voice_service_1.VoiceService();
+        this.subscriptionService = new subscription_service_1.SubscriptionService(this.dbService);
+        this.paymentService = new payment_service_1.PaymentService(this.dbService, this.subscriptionService);
     }
     async setupBotCommands() {
         try {
@@ -51,16 +57,18 @@ class ProjectManagerBot {
             await this.dbService.connect();
             logger_1.logger.info('База данных подключена');
             // Настройка middleware
-            (0, middleware_1.setupMiddleware)(this.bot, this.dbService);
+            (0, middleware_1.setupMiddleware)(this.bot, this.dbService, this.subscriptionService);
             // Настройка команд
             (0, commands_1.setupCommands)(this.bot, {
                 dbService: this.dbService,
                 aiService: this.aiService,
                 projectService: this.projectService,
-                voiceService: this.voiceService
+                voiceService: this.voiceService,
+                subscriptionService: this.subscriptionService,
+                paymentService: this.paymentService
             });
             // Настройка cron задач
-            (0, cron_1.setupCronJobs)(this.bot, this.dbService);
+            (0, cron_1.setupCronJobs)(this.bot, this.dbService, this.subscriptionService, this.paymentService);
             // Настройка команд автокомплита
             await this.setupBotCommands();
             // Запуск бота

@@ -56,6 +56,19 @@ export interface DailyStatus {
   mood_score: number;
 }
 
+export interface Subscription {
+  id: number;
+  user_id: number;
+  plan: 'trial' | 'monthly' | 'yearly';
+  status: 'trial' | 'active' | 'expired' | 'cancelled';
+  start_date: string;
+  end_date: string;
+  payment_method_id?: string;
+  auto_renew: number; // 0 или 1 для SQLite
+  created_at: string;
+  updated_at: string;
+}
+
 export class DatabaseService {
   private db: Database | null = null;
   private dbPath: string;
@@ -166,6 +179,21 @@ export class DatabaseService {
           severity TEXT DEFAULT 'medium',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           resolved_at DATETIME
+        );
+      `);
+
+      await this.db.exec(`
+        CREATE TABLE IF NOT EXISTS subscriptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER REFERENCES users(id) UNIQUE NOT NULL,
+          plan TEXT DEFAULT 'trial',
+          status TEXT DEFAULT 'trial',
+          start_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          end_date DATETIME,
+          payment_method_id TEXT,
+          auto_renew INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
 
@@ -305,6 +333,137 @@ export class DatabaseService {
     `, [date]);
     
     return statuses;
+  }
+
+  // МЕТОДЫ ДЛЯ РАБОТЫ С ПОДПИСКАМИ
+
+  async getSubscriptionByUserId(userId: number): Promise<Subscription | null> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    const subscription = await this.db.get('SELECT * FROM subscriptions WHERE user_id = ?', [userId]);
+    return subscription as Subscription || null;
+  }
+
+  async createTrialSubscription(userId: number, trialDays: number): Promise<Subscription> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + trialDays);
+
+    await this.db.run(`
+      INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, auto_renew)
+      VALUES (?, 'trial', 'trial', datetime('now'), datetime('now', '+${trialDays} days'), 1)
+      ON CONFLICT(user_id) DO UPDATE SET
+        plan = 'trial',
+        status = 'trial',
+        start_date = datetime('now'),
+        end_date = datetime('now', '+${trialDays} days'),
+        auto_renew = 1,
+        updated_at = datetime('now')
+    `, [userId]);
+
+    const subscription = await this.db.get('SELECT * FROM subscriptions WHERE user_id = ?', [userId]);
+    return subscription as Subscription;
+  }
+
+  async activateSubscription(
+    userId: number,
+    plan: 'monthly' | 'yearly',
+    days: number,
+    paymentMethodId?: string
+  ): Promise<Subscription> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    await this.db.run(`
+      INSERT INTO subscriptions (user_id, plan, status, start_date, end_date, payment_method_id, auto_renew)
+      VALUES (?, ?, 'active', datetime('now'), datetime('now', '+${days} days'), ?, 1)
+      ON CONFLICT(user_id) DO UPDATE SET
+        plan = ?,
+        status = 'active',
+        start_date = datetime('now'),
+        end_date = datetime('now', '+${days} days'),
+        payment_method_id = COALESCE(?, payment_method_id),
+        auto_renew = 1,
+        updated_at = datetime('now')
+    `, [userId, plan, paymentMethodId || null, plan, paymentMethodId || null]);
+
+    const subscription = await this.db.get('SELECT * FROM subscriptions WHERE user_id = ?', [userId]);
+    return subscription as Subscription;
+  }
+
+  async extendSubscription(userId: number, days: number): Promise<Subscription> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    await this.db.run(`
+      UPDATE subscriptions
+      SET end_date = datetime(end_date, '+${days} days'),
+          status = 'active',
+          updated_at = datetime('now')
+      WHERE user_id = ?
+    `, [userId]);
+
+    const subscription = await this.db.get('SELECT * FROM subscriptions WHERE user_id = ?', [userId]);
+    return subscription as Subscription;
+  }
+
+  async updateSubscriptionStatus(userId: number, status: 'trial' | 'active' | 'expired' | 'cancelled'): Promise<void> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    await this.db.run(`
+      UPDATE subscriptions
+      SET status = ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `, [status, userId]);
+  }
+
+  async updatePaymentMethod(userId: number, paymentMethodId: string): Promise<void> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    await this.db.run(`
+      UPDATE subscriptions
+      SET payment_method_id = ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `, [paymentMethodId, userId]);
+  }
+
+  async setAutoRenew(userId: number, autoRenew: boolean): Promise<void> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    await this.db.run(`
+      UPDATE subscriptions
+      SET auto_renew = ?, updated_at = datetime('now')
+      WHERE user_id = ?
+    `, [autoRenew ? 1 : 0, userId]);
+  }
+
+  async getExpiringSubscriptions(withinHours: number = 24): Promise<Subscription[]> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    const subscriptions = await this.db.all(`
+      SELECT s.*, u.telegram_id, u.name, u.username
+      FROM subscriptions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.auto_renew = 1
+        AND s.status IN ('active', 'trial')
+        AND s.end_date <= datetime('now', '+${withinHours} hours')
+        AND s.end_date > datetime('now')
+    `);
+
+    return subscriptions as Subscription[];
+  }
+
+  async getExpiredSubscriptions(): Promise<Subscription[]> {
+    if (!this.db) throw new Error('База данных не подключена');
+
+    const subscriptions = await this.db.all(`
+      SELECT s.*, u.telegram_id, u.name, u.username
+      FROM subscriptions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.status IN ('active', 'trial')
+        AND s.end_date <= datetime('now')
+    `);
+
+    return subscriptions as Subscription[];
   }
 
   async close(): Promise<void> {

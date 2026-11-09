@@ -2,10 +2,17 @@ import * as cron from 'node-cron';
 import { Telegraf } from 'telegraf';
 import { BotContext } from '../index';
 import { DatabaseService } from '../services/database.service';
+import { SubscriptionService } from '../services/subscription.service';
+import { PaymentService } from '../services/payment.service';
 import { config } from '../config/config';
 import { logger } from '../utils/logger';
 
-export function setupCronJobs(bot: Telegraf<BotContext>, dbService: DatabaseService) {
+export function setupCronJobs(
+  bot: Telegraf<BotContext>,
+  dbService: DatabaseService,
+  subscriptionService?: SubscriptionService,
+  paymentService?: PaymentService
+) {
   
   // Daily Standup напоминание (каждый день в 14:00)
   cron.schedule('0 14 * * *', async () => {
@@ -118,5 +125,19 @@ ${userTags}
     }
   });
 
+  // Автопродление подписок (каждый день в 10:00)
+  cron.schedule('0 10 * * *', async () => {
+    try {
+      logger.info('Проверка подписок для автопродления');
+
+      if (paymentService) {
+        await paymentService.processAutoRenewal(bot);
+        await paymentService.processExpiredSubscriptions(bot);
+      }
+    } catch (error) {
+      logger.error('Ошибка в cron задаче автопродления:', error);
+    }
+  });
+
   logger.info('Cron задачи настроены');
-} 
+}

@@ -5,7 +5,7 @@ const telegraf_1 = require("telegraf");
 const logger_1 = require("../utils/logger");
 const escapeMarkdown_1 = require("../utils/escapeMarkdown");
 function setupBasicCommands(bot, services) {
-    const { projectService, aiService, voiceService } = services;
+    const { projectService, aiService, voiceService, subscriptionService } = services;
     // Команда /start
     bot.start(async (ctx) => {
         try {
@@ -13,7 +13,11 @@ function setupBasicCommands(bot, services) {
             if (!user)
                 return;
             // Регистрируем пользователя
-            await projectService.registerUser(user.id.toString(), user.first_name + (user.last_name ? ` ${user.last_name}` : ''), user.username, 'project_manager');
+            const dbUser = await projectService.registerUser(user.id.toString(), user.first_name + (user.last_name ? ` ${user.last_name}` : ''), user.username, 'project_manager');
+            // Создаём пробную подписку
+            if (subscriptionService) {
+                await subscriptionService.ensureTrialSubscription(dbUser.id);
+            }
             const welcomeMessage = `
 🚀 *Добро пожаловать в Проджект Менеджер Бот!*
 
@@ -55,7 +59,14 @@ function setupBasicCommands(bot, services) {
 /start - начать работу с ботом
 /help - эта справка
 /profile - настройка профиля
+/subscribe - оформить подписку
+/subscription - моя подписка
 /status - текущий статус
+
+*💳 Подписка:*
+🎁 Пробный период 1 сутки при регистрации
+💳 Месячная подписка — 390 ₽
+⭐ Годовая подписка — 3500 ₽
 
 *🚀 Проекты:*
 /projects - список проектов
