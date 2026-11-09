@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupStandupCommands = setupStandupCommands;
 const telegraf_1 = require("telegraf");
 const logger_1 = require("../utils/logger");
+const escapeMarkdown_1 = require("../utils/escapeMarkdown");
 const middleware_1 = require("../middleware");
 function setupStandupCommands(bot, services) {
     const { projectService, voiceService } = services;
@@ -65,9 +66,9 @@ ${userTags}
             const statusMessage = `
 📊 *Ваш статус на сегодня*
 
-✅ *Вчера:* ${myStatus.yesterday}
-🎯 *Сегодня:* ${myStatus.today}
-${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
+✅ *Вчера:* ${(0, escapeMarkdown_1.escapeMarkdown)(myStatus.yesterday)}
+🎯 *Сегодня:* ${(0, escapeMarkdown_1.escapeMarkdown)(myStatus.today)}
+${myStatus.blockers ? `🚫 *Блокеры:* ${(0, escapeMarkdown_1.escapeMarkdown)(myStatus.blockers)}` : ''}
 😊 *Настроение:* ${myStatus.mood_score}/10
       `;
             await ctx.replyWithMarkdown(statusMessage);
@@ -163,11 +164,11 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
                     await ctx.replyWithMarkdown(`
 ✅ *Цель спринта обновлена!*
 
-🎯 *Цель:* ${goal}
+🎯 *Цель:* ${(0, escapeMarkdown_1.escapeMarkdown)(goal)}
 
-🔬 *Гипотеза:* ${hypothesis}
+🔬 *Гипотеза:* ${(0, escapeMarkdown_1.escapeMarkdown)(hypothesis)}
 
-👥 *Целевая аудитория:* ${audience}
+👥 *Целевая аудитория:* ${(0, escapeMarkdown_1.escapeMarkdown)(audience)}
 
 *Следующие шаги:*
 • \`/sprinttasks\` - добавить задачи по зонам
@@ -266,9 +267,9 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
 ✅ *Голосовой standup обработан и сохранен!*
 
 📝 *Расшифровка:*
-• *Вчера:* ${standupData.yesterday}
-• *Сегодня:* ${standupData.today}
-• *Блокеры:* ${standupData.blockers || 'Нет'}
+• *Вчера:* ${(0, escapeMarkdown_1.escapeMarkdown)(standupData.yesterday)}
+• *Сегодня:* ${(0, escapeMarkdown_1.escapeMarkdown)(standupData.today)}
+• *Блокеры:* ${(0, escapeMarkdown_1.escapeMarkdown)(standupData.blockers || 'Нет')}
 • *Настроение:* ${moodEmoji} ${standupData.mood}/10
 
 Используйте /teamstatus чтобы посмотреть статус всей команды.

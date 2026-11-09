@@ -1,5 +1,6 @@
 import { DatabaseService, User, Project, Sprint, Task, DailyStatus } from './database.service';
 import { logger } from '../utils/logger';
+import { escapeMarkdown } from '../utils/escapeMarkdown';
 
 export class ProjectService {
   constructor(private dbService: DatabaseService) {}
@@ -129,12 +130,12 @@ export class ProjectService {
     
     statuses.forEach((status: any, index) => {
       const moodEmoji = this.getMoodEmoji(status.mood_score);
-      message += `👤 *${status.name}* (${status.role}) ${moodEmoji}\n`;
-      message += `✅ *Вчера:* ${status.yesterday}\n`;
-      message += `🎯 *Сегодня:* ${status.today}\n`;
+      message += `👤 *${escapeMarkdown(status.name)}* (${escapeMarkdown(status.role)}) ${moodEmoji}\n`;
+      message += `✅ *Вчера:* ${escapeMarkdown(status.yesterday)}\n`;
+      message += `🎯 *Сегодня:* ${escapeMarkdown(status.today)}\n`;
       
       if (status.blockers && status.blockers.trim()) {
-        message += `🚫 *Блокеры:* ${status.blockers}\n`;
+        message += `🚫 *Блокеры:* ${escapeMarkdown(status.blockers)}\n`;
       }
       
       if (index < statuses.length - 1) {
@@ -161,7 +162,7 @@ export class ProjectService {
     if (summary.activeProjects > 0) {
       message += '*Активные проекты:*\n';
       summary.projects.forEach((project: Project) => {
-        message += `• ${project.name}\n`;
+        message += `• ${escapeMarkdown(project.name)}\n`;
       });
       message += '\n';
     }

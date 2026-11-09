@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProjectService = void 0;
 const logger_1 = require("../utils/logger");
+const escapeMarkdown_1 = require("../utils/escapeMarkdown");
 class ProjectService {
     constructor(dbService) {
         this.dbService = dbService;
@@ -112,11 +113,11 @@ class ProjectService {
         let message = '📊 *Daily Standup - Сводка дня*\n\n';
         statuses.forEach((status, index) => {
             const moodEmoji = this.getMoodEmoji(status.mood_score);
-            message += `👤 *${status.name}* (${status.role}) ${moodEmoji}\n`;
-            message += `✅ *Вчера:* ${status.yesterday}\n`;
-            message += `🎯 *Сегодня:* ${status.today}\n`;
+            message += `👤 *${(0, escapeMarkdown_1.escapeMarkdown)(status.name)}* (${(0, escapeMarkdown_1.escapeMarkdown)(status.role)}) ${moodEmoji}\n`;
+            message += `✅ *Вчера:* ${(0, escapeMarkdown_1.escapeMarkdown)(status.yesterday)}\n`;
+            message += `🎯 *Сегодня:* ${(0, escapeMarkdown_1.escapeMarkdown)(status.today)}\n`;
             if (status.blockers && status.blockers.trim()) {
-                message += `🚫 *Блокеры:* ${status.blockers}\n`;
+                message += `🚫 *Блокеры:* ${(0, escapeMarkdown_1.escapeMarkdown)(status.blockers)}\n`;
             }
             if (index < statuses.length - 1) {
                 message += '\n---\n\n';
@@ -141,7 +142,7 @@ class ProjectService {
         if (summary.activeProjects > 0) {
             message += '*Активные проекты:*\n';
             summary.projects.forEach((project) => {
-                message += `• ${project.name}\n`;
+                message += `• ${(0, escapeMarkdown_1.escapeMarkdown)(project.name)}\n`;
             });
             message += '\n';
         }

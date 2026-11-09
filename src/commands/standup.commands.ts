@@ -2,6 +2,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { BotContext } from '../index';
 import { Services } from './index';
 import { logger } from '../utils/logger';
+import { escapeMarkdown } from '../utils/escapeMarkdown';
 import { setUserState, getUserState, clearUserState } from '../middleware';
 
 export function setupStandupCommands(bot: Telegraf<BotContext>, services: Services) {
@@ -77,9 +78,9 @@ ${userTags}
       const statusMessage = `
 📊 *Ваш статус на сегодня*
 
-✅ *Вчера:* ${myStatus.yesterday}
-🎯 *Сегодня:* ${myStatus.today}
-${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
+✅ *Вчера:* ${escapeMarkdown(myStatus.yesterday)}
+🎯 *Сегодня:* ${escapeMarkdown(myStatus.today)}
+${myStatus.blockers ? `🚫 *Блокеры:* ${escapeMarkdown(myStatus.blockers)}` : ''}
 😊 *Настроение:* ${myStatus.mood_score}/10
       `;
 
@@ -190,11 +191,11 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
           await ctx.replyWithMarkdown(`
 ✅ *Цель спринта обновлена!*
 
-🎯 *Цель:* ${goal}
+🎯 *Цель:* ${escapeMarkdown(goal)}
 
-🔬 *Гипотеза:* ${hypothesis}
+🔬 *Гипотеза:* ${escapeMarkdown(hypothesis)}
 
-👥 *Целевая аудитория:* ${audience}
+👥 *Целевая аудитория:* ${escapeMarkdown(audience)}
 
 *Следующие шаги:*
 • \`/sprinttasks\` - добавить задачи по зонам
@@ -319,9 +320,9 @@ ${myStatus.blockers ? `🚫 *Блокеры:* ${myStatus.blockers}` : ''}
 ✅ *Голосовой standup обработан и сохранен!*
 
 📝 *Расшифровка:*
-• *Вчера:* ${standupData.yesterday}
-• *Сегодня:* ${standupData.today}
-• *Блокеры:* ${standupData.blockers || 'Нет'}
+• *Вчера:* ${escapeMarkdown(standupData.yesterday)}
+• *Сегодня:* ${escapeMarkdown(standupData.today)}
+• *Блокеры:* ${escapeMarkdown(standupData.blockers || 'Нет')}
 • *Настроение:* ${moodEmoji} ${standupData.mood}/10
 
 Используйте /teamstatus чтобы посмотреть статус всей команды.
