@@ -53,6 +53,13 @@ export function setupMiddleware(
             const command = text.split(' ')[0].toLowerCase();
 
             if (!ALLOWED_COMMANDS.includes(command)) {
+              // ИСПРАВЛЕНИЕ: Проверить что user.id существует и имеет правильный тип
+              if (!user.id || typeof user.id !== 'number') {
+                logger.error(`Ошибка: некорректный user.id для пользователя ${ctx.from.id}: ${user.id}`);
+                await ctx.reply('❌ Ошибка при проверке подписки. Попробуйте позже или выполните /start');
+                return;
+              }
+
               const hasActive = await subscriptionService.hasActiveSubscription(user.id);
 
               if (!hasActive) {
@@ -72,6 +79,7 @@ export function setupMiddleware(
         }
       } catch (error) {
         logger.error('Ошибка при получении пользователя:', error);
+        // Не блокируем пользователя, позволяем продолжить
       }
     }
 
@@ -81,7 +89,11 @@ export function setupMiddleware(
   // Middleware для обработки ошибок
   bot.catch((err, ctx) => {
     logger.error('Ошибка в боте:', err);
-    ctx.reply('Произошла ошибка. Попробуйте позже.');
+    try {
+      ctx.reply('Произошла ошибка. Попробуйте позже.');
+    } catch (replyError) {
+      logger.error('Не удалось отправить сообщение об ошибке:', replyError);
+    }
   });
 }
 
@@ -96,4 +108,4 @@ export function getUserState(userId: string) {
 
 export function clearUserState(userId: string) {
   userStates.delete(userId);
-} 
+}

@@ -68,6 +68,13 @@ export class PaymentService {
         return;
       }
 
+      // ИСПРАВЛЕНИЕ: Убедиться что userId это валидное число
+      if (typeof userId !== 'number' || userId <= 0) {
+        logger.warn(`Некорректный userId: ${userId}`);
+        await ctx.reply('❌ Ошибка: недопустимый ID пользователя.');
+        return;
+      }
+
       const payload = `sub_${plan.id}_${userId}_${Date.now()}`;
 
       await bot.telegram.sendInvoice(userId, {
@@ -96,30 +103,51 @@ export class PaymentService {
   async handleSuccessfulPayment(ctx: BotContext): Promise<void> {
     try {
       const userId = ctx.from?.id;
-      if (!userId) return;
+      if (!userId) {
+        logger.warn('UserId не определен в handleSuccessfulPayment');
+        await ctx.reply('❌ Не удалось определить пользователя.');
+        return;
+      }
 
       const message = ctx.message as any;
       const successfulPayment = message?.successful_payment;
-      if (!successfulPayment) return;
+      if (!successfulPayment) {
+        logger.warn('successfulPayment не найден в сообщении');
+        return;
+      }
 
       const payload = successfulPayment.invoice_payload;
       const plan = payload.includes('yearly') ? 'yearly' : 'monthly';
 
       logger.info(`Успешная оплата от пользователя ${userId}, тариф ${plan}`);
 
-      // Активируем или продлеваем подписку
-      const subscription = await this.dbService.getSubscriptionByUserId(userId);
-
-      if (subscription && subscription.status === 'active') {
-        await this.subscriptionService.extendSubscription(userId, plan);
-      } else {
-        await this.subscriptionService.activateSubscription(userId, plan);
+      // ИСПРАВЛЕНИЕ: Получить database user.id для работы с БД
+      const user = await this.dbService.getUserByTelegramId(userId.toString());
+      if (!user) {
+        logger.error(`Пользователь с telegram_id ${userId} не найден в БД`);
+        await ctx.reply(
+          '❌ Ошибка: пользователь не найден в базе данных. Пожалуйста, выполните /start'
+        );
+        return;
       }
 
-      await ctx.reply(`✅ Оплата прошла успешно!\n\nВаша ${plan === 'yearly' ? 'годовая' : 'месячная'} подписка активирована.\nАвтопродление включено.`);
+      // Активируем или продлеваем подписку, используя database user.id
+      const subscription = await this.dbService.getSubscriptionByUserId(user.id);
+
+      if (subscription && subscription.status === 'active') {
+        await this.subscriptionService.extendSubscription(user.id, plan);
+      } else {
+        await this.subscriptionService.activateSubscription(user.id, plan);
+      }
+
+      await ctx.reply(
+        `✅ Оплата прошла успешно!\n\nВаша ${plan === 'yearly' ? 'годовая' : 'месячная'} подписка активирована.\nАвтопродление включено.`
+      );
     } catch (error) {
       logger.error('Ошибка при обработке успешной оплаты:', error);
-      await ctx.reply('❌ Оплата прошла, но возникла ошибка при активации подписки. Обратитесь к поддержке.');
+      await ctx.reply(
+        '❌ Оплата прошла, но возникла ошибка при активации подписки. Обратитесь в поддержку.'
+      );
     }
   }
 
@@ -136,6 +164,12 @@ export class PaymentService {
     }
 
     try {
+      // ИСПРАВЛЕНИЕ: Проверить что userId это число
+      if (typeof userId !== 'number' || userId <= 0) {
+        logger.error(`Некорректный userId для YooKassa: ${userId}`);
+        return null;
+      }
+
       const idempotenceKey = `renew_${userId}_${Date.now()}`;
       const body: any = {
         amount: {
@@ -222,12 +256,12 @@ export class PaymentService {
       const expiring = await this.dbService.getExpiringSubscriptions(24);
 
       for (const subscription of expiring as any[]) {
-        const userId = subscription.user_id;
-        const telegramId = subscription.telegram_id;
+        const userId = subscription.user_id;  // Database ID
+        const telegramId = subscription.telegram_id;  // Telegram ID для отправки
 
         if (!subscription.payment_method_id) {
           await bot.telegram.sendMessage(
-            telegramId,
+            parseInt(telegramId),
             '⏰ Ваша подписка скоро закончится. Пожалуйста, продлите её командой /subscribe'
           );
           continue;
@@ -240,14 +274,14 @@ export class PaymentService {
         const payment = await this.createYooKassaPayment(
           price,
           description,
-          userId,
+          userId,  // Используем database ID
           plan,
           subscription.payment_method_id
         );
 
         if (!payment) {
           await bot.telegram.sendMessage(
-            telegramId,
+            parseInt(telegramId),
             '❌ Не удалось выполнить автопродление подписки. Пожалуйста, продлите вручную: /subscribe'
           );
           continue;
@@ -260,12 +294,12 @@ export class PaymentService {
         if (status?.status === 'succeeded') {
           await this.subscriptionService.extendSubscription(userId, plan);
           await bot.telegram.sendMessage(
-            telegramId,
+            parseInt(telegramId),
             `✅ Подписка успешно продлена (${plan === 'yearly' ? 'годовая' : 'месячная'}).`
           );
         } else {
           await bot.telegram.sendMessage(
-            telegramId,
+            parseInt(telegramId),
             '❌ Автопродление не удалось. Пожалуйста, оплатите вручную: /subscribe'
           );
         }
@@ -284,7 +318,7 @@ export class PaymentService {
 
         await this.subscriptionService.expireSubscription(subscription.user_id);
         await bot.telegram.sendMessage(
-          telegramId,
+          parseInt(telegramId),
           '❌ Ваша подписка истекла. Все команды заблокированы. Чтобы продолжить, оформите подписку: /subscribe'
         );
       }
